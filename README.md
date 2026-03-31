@@ -2,6 +2,19 @@
 
 帮助客户将 AI 模型部署到算能（SOPHON）BM1684X TPU 设备上的技能合集。
 
+## 在 Claude Code 中使用
+
+将本仓库的 `skills/` 目录软链接或复制到 `~/.claude/skills/`，Claude Code 即可自动加载，之后在对话中直接描述任务，Claude 会自动调用对应 skill：
+
+```bash
+git clone https://github.com/baifengbai/skill_hub.git
+ln -s "$(pwd)/skill_hub/skills/funasr-bmodel" ~/.claude/skills/funasr-bmodel
+ln -s "$(pwd)/skill_hub/skills/yolov5-bmodel" ~/.claude/skills/yolov5-bmodel
+ln -s "$(pwd)/skill_hub/skills/ppocr-bmodel"  ~/.claude/skills/ppocr-bmodel
+```
+
+加载后，在 Claude Code 中说「帮我在 BM1684X 设备上部署 FunASR」即可自动调用对应 skill。
+
 每个 skill 包含：
 - 完整的部署步骤与踩坑记录
 - Flask Web 前端（麦克风录音 / 文件上传）
