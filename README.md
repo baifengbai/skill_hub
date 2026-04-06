@@ -39,6 +39,8 @@ ln -s "$(pwd)/skill_hub/skills/ppocr-bmodel"  ~/.claude/skills/ppocr-bmodel
 | [funasr-bmodel](./skills/funasr-bmodel/) | Paraformer Large | 中文语音识别（ASR + VAD + 标点） |
 | [yolov5-bmodel](./skills/yolov5-bmodel/) | YOLOv5s | COCO 80 类目标检测，含可调阈值 |
 | [ppocr-bmodel](./skills/ppocr-bmodel/) | PP-OCRv4 | 中文文字检测与识别（两阶段） |
+| [bytetrack-bmodel](./skills/bytetrack-bmodel/) | YOLOv5s + ByteTrack | 多目标追踪，自动选择 bmcv/TPU 或 OpenCV/CPU 后端 |
+| [vila-bmodel](./skills/vila-bmodel/) | VILA-1.5-3B | 视觉语言模型图片/视频问答，SSE 流式输出，不依赖 transformers |
 
 ## 为什么用 gssh 而不是 SSH
 
