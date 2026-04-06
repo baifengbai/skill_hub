@@ -8,7 +8,7 @@ import json
 import cv2
 import numpy as np
 import sophon.sail as sail
-from flask import Flask, request, jsonify, render_template_string, Response
+from flask import Flask, request, jsonify, render_template_string, Response, send_file
 
 # ── 路径设置 ──────────────────────────────────────────────────────────────────
 BASE = '/data/sophon-demo/sample/ByteTrack/python'
@@ -25,8 +25,13 @@ CFG_FILE = '/data/sophon-demo/sample/ByteTrack/python/configs/bytetrack.yaml'
 DEMO_VIDEO = '/data/sophon-demo/sample/ByteTrack/datasets/test_car_person_1080P.mp4'
 UPLOAD_DIR = '/tmp/bytetrack_uploads'
 OUTPUT_DIR = '/tmp/bytetrack_output'
+FRAMES_DIR = '/tmp/bytetrack_frames'
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(FRAMES_DIR, exist_ok=True)
+
+# 预览帧缩放尺寸（节省存储，加速传输）
+PREVIEW_W, PREVIEW_H = 960, 540
 
 app = Flask(__name__)
 
@@ -38,11 +43,14 @@ def get_color(track_id):
     return tuple(TRACK_COLORS[track_id % 1000])
 
 # ── 任务状态管理 ──────────────────────────────────────────────────────────────
-tasks = {}   # task_id -> {status, progress, result, error, stats}
+tasks = {}   # task_id -> {status, progress, result, error, stats, frame_count, fps}
 
 def run_tracking(task_id, video_path, conf_thresh, nms_thresh, track_thresh):
     try:
         tasks[task_id]['status'] = 'running'
+
+        frame_dir = os.path.join(FRAMES_DIR, task_id)
+        os.makedirs(frame_dir, exist_ok=True)
 
         # 加载检测器（YOLOv5 接受 args 对象）
         from types import SimpleNamespace
@@ -63,9 +71,10 @@ def run_tracking(task_id, video_path, conf_thresh, nms_thresh, track_thresh):
         cap = cv2.VideoCapture(video_path)
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps_src = cap.get(cv2.CAP_PROP_FPS) or 25
+
+        # 同时写 mp4v 文件供下载
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
         out_path = os.path.join(OUTPUT_DIR, f'{task_id}.mp4')
         writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'),
                                  fps_src, (w, h))
@@ -118,25 +127,25 @@ def run_tracking(task_id, video_path, conf_thresh, nms_thresh, track_thresh):
             cv2.putText(frame, hud, (10, 28), cv2.FONT_HERSHEY_SIMPLEX,
                         0.65, (0,255,0), 2, cv2.LINE_AA)
 
+            # 写原始视频（供下载）
             writer.write(frame)
+
+            # 保存预览帧（缩放 JPEG）
+            preview = cv2.resize(frame, (PREVIEW_W, PREVIEW_H))
+            cv2.imwrite(os.path.join(frame_dir, f'{frame_id:06d}.jpg'), preview,
+                        [cv2.IMWRITE_JPEG_QUALITY, 80])
+
             tasks[task_id]['progress'] = int(frame_id / max(total, 1) * 100)
 
         cap.release()
         writer.release()
 
-        # 转为 H.264 以便浏览器播放
-        h264_path = out_path.replace('.mp4', '_h264.mp4')
-        subprocess.run(['ffmpeg', '-y', '-i', out_path,
-                        '-vcodec', 'libx264', '-crf', '23', h264_path],
-                       capture_output=True)
-        if os.path.exists(h264_path):
-            os.remove(out_path)
-            out_path = h264_path
-
         tasks[task_id].update({
             'status': 'done',
             'progress': 100,
             'result': out_path,
+            'frame_count': frame_id,
+            'fps': fps_src,
             'stats': {
                 'frames': frame_id,
                 'total_ids': len(max_track_ids),
@@ -203,11 +212,21 @@ input[type=range]{width:100%;accent-color:#58a6ff;margin-bottom:12px}
 .stat-val{font-size:22px;font-weight:700;color:#58a6ff}
 .stat-lbl{font-size:11px;color:#8b949e;margin-top:2px}
 .video-wrap{background:#000;border-radius:12px;overflow:hidden;min-height:300px;
-  display:flex;align-items:center;justify-content:center;position:relative}
-video{width:100%;max-height:540px;display:none}
+  display:flex;align-items:center;justify-content:center;position:relative;flex-direction:column}
+#preview{width:100%;max-height:520px;object-fit:contain;display:none}
 .video-placeholder{color:#484f58;text-align:center;padding:60px 20px;font-size:14px}
 .error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
   border-radius:10px;padding:12px;color:#fca5a5;font-size:13px;margin-top:10px;display:none}
+.player-ctrl{width:100%;padding:10px 14px;display:none;align-items:center;gap:10px;
+  background:rgba(0,0,0,.4);border-top:1px solid rgba(255,255,255,.06)}
+.player-ctrl.show{display:flex}
+.play-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1}
+#seekBar{flex:1;accent-color:#58a6ff;height:4px}
+#timeLbl{font-size:12px;color:#8b949e;white-space:nowrap;min-width:80px;text-align:right}
+.dl-btn{display:none;width:100%;margin-top:10px;padding:9px;
+  background:rgba(56,139,253,.15);border:1px solid rgba(56,139,253,.3);
+  border-radius:10px;color:#58a6ff;font-size:13px;cursor:pointer;text-decoration:none;text-align:center}
+.dl-btn.show{display:block}
 </style>
 </head>
 <body>
@@ -254,16 +273,22 @@ video{width:100%;max-height:540px;display:none}
       </div>
     </div>
 
-    <!-- 右栏：视频播放 -->
+    <!-- 右栏：帧预览播放器 -->
     <div class="panel">
       <div class="panel-title">追踪结果</div>
       <div class="video-wrap" id="videoWrap">
         <div class="video-placeholder" id="vph">
           <div style="font-size:40px;margin-bottom:12px">🎯</div>
-          选择视频并点击「开始追踪」<br>结果将在此处播放
+          选择视频并点击「开始追踪」<br>结果将在此处逐帧播放
         </div>
-        <video id="player" controls></video>
+        <img id="preview" alt="追踪预览">
       </div>
+      <div class="player-ctrl" id="playerCtrl">
+        <button class="play-btn" id="playBtn" onclick="togglePlay()">⏸</button>
+        <input type="range" id="seekBar" min="1" value="1" oninput="seekTo(this.value)">
+        <span id="timeLbl">0 / 0</span>
+      </div>
+      <a class="dl-btn" id="dlBtn" href="#" download>⬇ 下载追踪结果视频（mp4v）</a>
     </div>
   </div>
 </div>
@@ -272,6 +297,9 @@ video{width:100%;max-height:540px;display:none}
 let selectedFile = null;
 let useDemo_ = false;
 let pollTimer = null;
+// 播放器状态
+let frames = 0, fps = 25, curFrame = 1, playing = false, playTimer = null;
+let taskId_ = null;
 
 // 拖拽
 const zone = document.getElementById('zone');
@@ -297,8 +325,11 @@ async function startTask(){
   document.getElementById('progWrap').classList.add('show');
   document.getElementById('errBox').style.display = 'none';
   document.getElementById('statsPanel').style.display = 'none';
-  document.getElementById('player').style.display = 'none';
+  document.getElementById('preview').style.display = 'none';
   document.getElementById('vph').style.display = 'flex';
+  document.getElementById('playerCtrl').classList.remove('show');
+  document.getElementById('dlBtn').classList.remove('show');
+  stopPlay();
 
   const fd = new FormData();
   if(selectedFile) fd.append('video', selectedFile);
@@ -310,6 +341,7 @@ async function startTask(){
   try{
     const res = await fetch('/api/track', {method:'POST', body:fd});
     const {task_id} = await res.json();
+    taskId_ = task_id;
     pollTimer = setInterval(() => poll(task_id, btn), 1500);
   }catch(e){
     showError(e.message); btn.disabled = false;
@@ -326,8 +358,7 @@ async function poll(task_id, btn){
     if(d.status === 'done'){
       clearInterval(pollTimer);
       btn.disabled = false;
-      showVideo('/api/result/' + task_id);
-      showStats(d.stats);
+      initPlayer(task_id, d.frame_count, d.fps, d.stats);
     } else if(d.status === 'error'){
       clearInterval(pollTimer);
       btn.disabled = false;
@@ -336,11 +367,50 @@ async function poll(task_id, btn){
   }catch(e){ console.error(e); }
 }
 
-function showVideo(url){
-  const v = document.getElementById('player');
-  v.src = url; v.style.display = 'block';
+function initPlayer(task_id, fc, videoFps, stats){
+  frames = fc; fps = videoFps || 25;
+  curFrame = 1; playing = true;
   document.getElementById('vph').style.display = 'none';
-  v.play();
+  document.getElementById('preview').style.display = 'block';
+  const seek = document.getElementById('seekBar');
+  seek.max = frames; seek.value = 1;
+  document.getElementById('playerCtrl').classList.add('show');
+  const dlBtn = document.getElementById('dlBtn');
+  dlBtn.href = '/api/result/' + task_id;
+  dlBtn.classList.add('show');
+  showStats(stats);
+  startPlay(task_id);
+}
+
+function startPlay(task_id){
+  stopPlay();
+  playing = true;
+  document.getElementById('playBtn').textContent = '⏸';
+  const interval = Math.max(1000 / fps, 40);
+  playTimer = setInterval(() => {
+    if(curFrame > frames){ curFrame = 1; }
+    document.getElementById('preview').src = '/api/frame/' + task_id + '/' + curFrame + '?t=' + Date.now();
+    document.getElementById('seekBar').value = curFrame;
+    document.getElementById('timeLbl').textContent = curFrame + ' / ' + frames;
+    curFrame++;
+  }, interval);
+}
+
+function stopPlay(){
+  if(playTimer){ clearInterval(playTimer); playTimer = null; }
+  playing = false;
+  document.getElementById('playBtn').textContent = '▶';
+}
+
+function togglePlay(){
+  if(playing){ stopPlay(); }
+  else { startPlay(taskId_); }
+}
+
+function seekTo(val){
+  curFrame = parseInt(val);
+  document.getElementById('timeLbl').textContent = curFrame + ' / ' + frames;
+  document.getElementById('preview').src = '/api/frame/' + taskId_ + '/' + curFrame + '?t=' + Date.now();
 }
 
 function showStats(s){
@@ -378,7 +448,8 @@ def index():
 @app.route('/api/track', methods=['POST'])
 def start_track():
     task_id = str(uuid.uuid4())[:8]
-    tasks[task_id] = {'status': 'pending', 'progress': 0, 'result': None, 'error': None, 'stats': None}
+    tasks[task_id] = {'status': 'pending', 'progress': 0, 'result': None,
+                      'error': None, 'stats': None, 'frame_count': 0, 'fps': 25}
 
     conf_thresh  = float(request.form.get('conf_thresh',  0.40))
     nms_thresh   = float(request.form.get('nms_thresh',   0.70))
@@ -406,15 +477,25 @@ def get_status(task_id):
         return jsonify({'error': 'not found'}), 404
     return jsonify(t)
 
+@app.route('/api/frame/<task_id>/<int:frame_idx>')
+def get_frame(task_id, frame_idx):
+    """返回指定帧的 JPEG 图片"""
+    frame_path = os.path.join(FRAMES_DIR, task_id, f'{frame_idx:06d}.jpg')
+    if not os.path.exists(frame_path):
+        return '', 404
+    return send_file(frame_path, mimetype='image/jpeg')
+
 @app.route('/api/result/<task_id>')
 def get_result(task_id):
+    """下载 mp4v 原始视频"""
     t = tasks.get(task_id)
     if not t or not t.get('result') or not os.path.exists(t['result']):
         return jsonify({'error': 'not ready'}), 404
-    return Response(
-        open(t['result'], 'rb').read(),
+    return send_file(
+        t['result'],
         mimetype='video/mp4',
-        headers={'Content-Disposition': f'inline; filename=bytetrack_{task_id}.mp4'}
+        as_attachment=True,
+        download_name=f'bytetrack_{task_id}.mp4'
     )
 
 if __name__ == '__main__':
