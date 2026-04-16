@@ -42,6 +42,7 @@ ln -s "$(pwd)/skill_hub/skills/ppocr-bmodel"  ~/.claude/skills/ppocr-bmodel
 | [bytetrack-bmodel](./skills/bytetrack-bmodel/) | YOLOv5s + ByteTrack | 多目标追踪，自动选择 bmcv/TPU 或 OpenCV/CPU 后端 |
 | [vila-bmodel](./skills/vila-bmodel/) | VILA-1.5-3B | 视觉语言模型图片/视频问答，SSE 流式输出，不依赖 transformers |
 | [qwen3-bmodel](./skills/qwen3-bmodel/) | Qwen3-4B AWQ W4BF16 | 对话 LLM，SSE 流式输出，单轮模式（seq512 限制）|
+| [qwen3_5-bmodel](./skills/qwen3_5-bmodel/) | Qwen3.5-VL-2B int4 W4BF16 | 多模态 VL（图片/视频/文字问答），SSE 流式，seq2048 |
 
 ## 为什么用 gssh 而不是 SSH
 
