@@ -171,9 +171,7 @@ curl -X POST http://localhost:5004/api/chat -F 'message=描述这张图片' -F '
 
 ## 演示
 
-https://github.com/user-attachments/assets/qwen3_5-bmodel-demo.mp4
-
-https://github.com/baifengbai/skill_hub/blob/main/skills/qwen3_5-bmodel/demo.mp4
+<video src="demo.mp4" controls width="720"></video>
 
 ## 停止服务
 
