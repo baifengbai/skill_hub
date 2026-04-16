@@ -13,8 +13,9 @@ version: 1.0.0
 - 设备：BM1684X SOC，TPU 内存 13.5GB，系统内存 1.5GB
 - 系统：Ubuntu 20.04 aarch64
 - 推理引擎：`tpu_perf.infer.SGInfer`（不依赖 sophon.sail）
-- Python：使用 `/data/AIGC-SDK/hub_venv`（Python 3.10，含 torch 2.8.0+cpu）
+- Python：需要 Python 3.10 虚拟环境（含 torch）
   - **不要用系统 Python 3.8**：PyPI 的 torch 2.x 在该 ARM CPU 上会报 `Illegal instruction`
+  - 如设备已有 `/data/AIGC-SDK/hub_venv` 可直接使用；否则参考 README "通用前置条件" 创建 Python 3.10 虚拟环境
 
 ---
 
@@ -39,13 +40,14 @@ echo '/data/swapfile none swap sw 0 0' >> /etc/fstab
 # ffmpeg 用于音频格式转换
 apt-get install -y ffmpeg
 
-# 在 hub_venv 中安装 Python 依赖
-/data/AIGC-SDK/hub_venv/bin/pip install librosa flask -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
-/data/AIGC-SDK/hub_venv/bin/pip install hydra-core kaldiio omegaconf six torch-complex tqdm -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+# 在 Python 3.10 虚拟环境中安装依赖（以下用 $VENV 指代虚拟环境路径）
+# 如有 AIGC-SDK：VENV=/data/AIGC-SDK/hub_venv；否则自行创建：VENV=/data/py310env
+$VENV/bin/pip install librosa flask -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+$VENV/bin/pip install hydra-core kaldiio omegaconf six torch-complex tqdm -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
 
 # 安装 tpu-perf（从项目自带 whl）
 cd /data/FunASR-bmodel
-/data/AIGC-SDK/hub_venv/bin/pip install bmodel/tpu_perf-1.2.35-py3-none-manylinux2014_aarch64.whl
+$VENV/bin/pip install bmodel/tpu_perf-1.2.35-py3-none-manylinux2014_aarch64.whl
 ```
 
 ### 2. 克隆项目
@@ -160,7 +162,8 @@ if __name__ == '__main__':
 
 ```bash
 # 后台启动，日志写文件
-nohup /data/AIGC-SDK/hub_venv/bin/python3 /data/FunASR-bmodel/funasr_web.py > /tmp/funasr_web.log 2>&1 &
+# $VENV 为 Python 3.10 虚拟环境路径
+nohup $VENV/bin/python3 /data/FunASR-bmodel/funasr_web.py > /tmp/funasr_web.log 2>&1 &
 
 # 观察启动日志（模型加载约需 60~90 秒）
 tail -f /tmp/funasr_web.log
@@ -186,7 +189,7 @@ gssh forward -l 5001 -r 5001
 ### Illegal instruction（torch）
 - **现象**：`python3 -c 'import torch'` 报 `Illegal instruction`
 - **原因**：PyPI 的 torch 2.x aarch64 wheel 使用了该 ARM CPU 不支持的指令集
-- **解决**：使用 `/data/AIGC-SDK/hub_venv/bin/python3`（torch 2.8.0+cpu，已针对该平台编译）
+- **解决**：使用 Python 3.10 虚拟环境中编译好的 torch（如 AIGC-SDK 的 hub_venv 或自建的 py310env）
 
 ### 模型加载很慢
 - 正常现象，encoder_fp16 315MB + 其他模型合计约 400MB 需传入 TPU
@@ -208,6 +211,6 @@ gssh forward -l 5001 -r 5001
 | bmodel 文件 | `/data/FunASR-bmodel/bmodel/<model>/models/BM1684X/` |
 | Web 服务 | `/data/FunASR-bmodel/funasr_web.py` |
 | 服务日志 | `/tmp/funasr_web.log` |
-| hub_venv Python | `/data/AIGC-SDK/hub_venv/bin/python3` |
+| Python 3.10 环境 | `$VENV/bin/python3`（AIGC-SDK 的 hub_venv 或自建 py310env）|
 | bm-smi | `/opt/sophon/libsophon-0.5.1/bin/bm-smi` |
 | swap 文件 | `/data/swapfile`（2GB） |

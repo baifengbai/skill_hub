@@ -30,7 +30,7 @@
 - `flask` (2.2.2) — Web 服务
 - `numpy`
 
-> **注意**：不要使用 `/data/AIGC-SDK/hub_venv`，该环境缺少 `cv2`。
+> **注意**：本 skill 使用系统 Python 3.8 即可（依赖 `cv2`）。如果使用 Python 3.10 虚拟环境，需确保其中安装了 `opencv-python`。
 
 ## 部署步骤
 

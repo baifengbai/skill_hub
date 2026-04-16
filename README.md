@@ -30,7 +30,7 @@ ln -s "$(pwd)/skill_hub/skills/ppocr-bmodel"  ~/.claude/skills/ppocr-bmodel
 | 系统内存 | 1.5 GB（需配置 swap） |
 | 系统 | Ubuntu 20.04 aarch64 |
 | 推理引擎 | tpu_perf / sophon.sail |
-| Python | `/data/AIGC-SDK/hub_venv`（Python 3.10） |
+| Python | Python 3.10 虚拟环境（见"通用前置条件"） |
 
 ## Skill 列表
 
@@ -90,8 +90,18 @@ echo '/data/swapfile none swap sw 0 0' >> /etc/fstab
 # 2. 安装 ffmpeg
 apt-get install -y ffmpeg
 
-# 3. 使用 hub_venv（Python 3.10，torch 已针对该平台编译）
-/data/AIGC-SDK/hub_venv/bin/python3 your_service.py
+# 3. 创建 Python 3.10 虚拟环境（部分 skill 需要 Python 3.10）
+#    系统 Python 3.8 无法加载 cpython-310 编译的 .so 扩展
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update && sudo apt install python3.10 python3.10-dev
+python3.10 -m venv --without-pip /data/py310env
+source /data/py310env/bin/activate
+curl https://bootstrap.pypa.io/get-pip.py | python
+pip install torchvision pillow flask numpy
+
+# 之后各 skill 中的 python3.10 命令均指该虚拟环境
+# 例：/data/py310env/bin/python3.10 your_service.py
 ```
 
 > ⚠️ **不要用系统 Python 3.8 + PyPI torch**：会报 `Illegal instruction`，因指令集不兼容。
+> 如果设备已有 `/data/AIGC-SDK/hub_venv`（Python 3.10），也可以直接使用。

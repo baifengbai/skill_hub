@@ -12,7 +12,8 @@ description: 在 SOPHON BM1684X 设备上部署 Qwen3.5-VL 多模态模型服务
 - SOPHON BM1684X SOC (aarch64, Ubuntu 20.04)
 - bmodel: `qwen3.5-2b-int4-autoround_w4bf16_seq2048_bm1684x_1dev_dynamic_*.bmodel`（~2.3G）
 - 推理扩展: `chat.cpython-310-aarch64-linux-gnu.so`（需 Python 3.10 编译）
-- Python: `/data/AIGC-SDK/hub_venv/bin/python3.10`
+- Python: 需要 Python 3.10 虚拟环境（如有 AIGC-SDK 可用 `/data/AIGC-SDK/hub_venv`；否则参考 README 创建）
+- 以下用 `$VENV` 指代虚拟环境路径
 - 依赖: `flask`, `transformers>=5.5`, `torchvision`, `qwen_vl_utils`, `numpy`, `pillow`
 
 ## 关键坑点
@@ -22,7 +23,7 @@ description: 在 SOPHON BM1684X 设备上部署 Qwen3.5-VL 多模态模型服务
 Qwen3.5 的 `model_type: "qwen3_5"` 和 `Qwen3VLProcessor`/`Qwen3VLVideoProcessor` 在 transformers 4.x 中不存在。`AutoProcessor.from_pretrained()` 会回退为 `Qwen2TokenizerFast`（无 `.tokenizer` 属性），报 `has no attribute tokenizer`。
 
 ```bash
-/data/AIGC-SDK/hub_venv/bin/pip3 install --upgrade transformers qwen_vl_utils
+$VENV/bin/pip3 install --upgrade transformers qwen_vl_utils
 ```
 
 升级后 AutoProcessor 正确返回 `Qwen2_5_VLProcessor`（兼容 Qwen3.5）。
@@ -45,8 +46,8 @@ CMakeLists.txt 硬编码 `find_package(Python 3.10 REQUIRED)`。编译步骤：
 cd python_demo
 mkdir build && cd build
 cmake .. \
-  -DPython_EXECUTABLE=/data/AIGC-SDK/hub_venv/bin/python3.10 \
-  -Dpybind11_DIR=/data/AIGC-SDK/hub_venv/lib/python3.10/site-packages/pybind11/share/cmake/pybind11
+  -DPython_EXECUTABLE=$VENV/bin/python3.10 \
+  -Dpybind11_DIR=$VENV/lib/python3.10/site-packages/pybind11/share/cmake/pybind11
 make -j4
 cp chat.cpython-310-aarch64-linux-gnu.so ..
 ```
@@ -88,19 +89,19 @@ gssh exec "cd /data/LLM-TPU && git fetch origin refs/heads/main && git checkout 
 ### 2. 升级依赖
 
 ```bash
-gssh exec "/data/AIGC-SDK/hub_venv/bin/pip3 install --upgrade transformers qwen_vl_utils torchvision"
+gssh exec "$VENV/bin/pip3 install --upgrade transformers qwen_vl_utils torchvision"
 ```
 
 ### 3. 编译 chat.so
 
 ```bash
-gssh exec "cd /data/LLM-TPU/models/Qwen3_5/python_demo && mkdir -p build && cd build && cmake .. -DPython_EXECUTABLE=/data/AIGC-SDK/hub_venv/bin/python3.10 -Dpybind11_DIR=/data/AIGC-SDK/hub_venv/lib/python3.10/site-packages/pybind11/share/cmake/pybind11 && make -j4 && cp chat.cpython-310-aarch64-linux-gnu.so .."
+gssh exec "cd /data/LLM-TPU/models/Qwen3_5/python_demo && mkdir -p build && cd build && cmake .. -DPython_EXECUTABLE=$VENV/bin/python3.10 -Dpybind11_DIR=$VENV/lib/python3.10/site-packages/pybind11/share/cmake/pybind11 && make -j4 && cp chat.cpython-310-aarch64-linux-gnu.so .."
 ```
 
 ### 4. 下载 bmodel
 
 ```bash
-gssh exec "mkdir -p /data/LLM-TPU/models/Qwen3_5/models/BM1684X && cd /data/LLM-TPU/models/Qwen3_5/models/BM1684X && /data/AIGC-SDK/hub_venv/bin/python3.10 -m dfss --url=open@sophgo.com:/ext_model_information/LLM/LLM-TPU/qwen3.5-2b-int4-autoround_w4bf16_seq2048_bm1684x_1dev_dynamic_20260415_111517.bmodel --enable_http"
+gssh exec "mkdir -p /data/LLM-TPU/models/Qwen3_5/models/BM1684X && cd /data/LLM-TPU/models/Qwen3_5/models/BM1684X && $VENV/bin/python3.10 -m dfss --url=open@sophgo.com:/ext_model_information/LLM/LLM-TPU/qwen3.5-2b-int4-autoround_w4bf16_seq2048_bm1684x_1dev_dynamic_20260415_111517.bmodel --enable_http"
 ```
 
 约 2.3G，速度约 1.7 MB/s，需等待约 20 分钟。
@@ -114,7 +115,7 @@ gssh scp -put qwen3_5_web.py /data/LLM-TPU/models/Qwen3_5/python_demo/qwen3_5_we
 ### 6. 启动服务
 
 ```bash
-gssh exec "cd /data/LLM-TPU/models/Qwen3_5/python_demo && setsid /data/AIGC-SDK/hub_venv/bin/python3.10 qwen3_5_web.py > /tmp/qwen3_5_web.log 2>&1 < /dev/null &"
+gssh exec "cd /data/LLM-TPU/models/Qwen3_5/python_demo && setsid $VENV/bin/python3.10 qwen3_5_web.py > /tmp/qwen3_5_web.log 2>&1 < /dev/null &"
 ```
 
 ### 7. 等待模型加载（约 60-90 秒）
